@@ -1,0 +1,343 @@
+<!doctype html>
+<!--
+  Care Bot
+  Copyright © 2026 Mazi Saint Concepts. All rights reserved.
+  Mazi Saint Concepts™ is a trademark of Mazi Saint Concepts.
+  Unauthorised copying, distribution or resale of this software is prohibited.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="author" content="Mazi Saint Concepts">
+<meta name="copyright" content="Copyright © 2026 Mazi Saint Concepts. All rights reserved.">
+<meta name="description" content="Care Bot by Mazi Saint Concepts: an AI customer care assistant for businesses on WhatsApp.">
+<title>Care Bot | Mazi Saint Concepts</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1b1f24; --muted:#6a727c; --line:#e3e6ea; --green:#128c4a; --red:#c0392b; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111418; --card:#1a1f25; --ink:#eef1f4; --muted:#98a1ab; --line:#2a313a; --green:#35c27a; --red:#ff6b5c; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui,sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width:760px; margin:0 auto; padding:16px; }
+  h1 { font-size:20px; margin:8px 0 16px; } h2 { font-size:16px; margin:0 0 10px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:14px; }
+  label { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
+  input, textarea, select { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--ink); font:inherit; }
+  textarea { min-height:90px; resize:vertical; }
+  button { padding:10px 14px; border:0; border-radius:8px; background:var(--green); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  button.danger { background:var(--red); }
+  button:disabled { opacity:.5; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; } .row > * { flex:1; min-width:120px; } .row button { flex:0 0 auto; }
+  .muted { color:var(--muted); font-size:13px; }
+  .code { font:700 32px/1.2 ui-monospace,monospace; letter-spacing:4px; text-align:center; padding:14px; border:2px dashed var(--green); border-radius:10px; margin:10px 0; }
+  .chat { max-height:280px; overflow:auto; display:flex; flex-direction:column; gap:6px; margin:8px 0; }
+  .bubble { padding:8px 10px; border-radius:10px; max-width:85%; white-space:pre-wrap; }
+  .customer { background:var(--bg); align-self:flex-start; border:1px solid var(--line); }
+  .bot { background:var(--green); color:#fff; align-self:flex-end; }
+  .flag { font-size:12px; color:var(--red); align-self:flex-end; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:99px; font-size:12px; border:1px solid var(--line); }
+  .hidden { display:none; }
+  .brand { font-size:13px; color:var(--muted); margin:-10px 0 16px; }
+  footer { max-width:760px; margin:0 auto; padding:8px 16px 32px; font-size:12px; color:var(--muted); line-height:1.6; }
+  footer a { color:var(--muted); text-decoration:underline; }
+  footer p { margin:0 0 8px; }
+  dialog { width:min(680px, calc(100vw - 24px)); max-height:85vh; padding:0; border:1px solid var(--line); border-radius:12px; background:var(--card); color:var(--ink); }
+  dialog::backdrop { background:rgba(0,0,0,.5); }
+  .dlg-head { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:12px 16px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--card); }
+  .dlg-head h2 { margin:0; }
+  .legal { padding:4px 16px 16px; font-size:14px; }
+  .legal h3 { font-size:14px; margin:16px 0 4px; }
+  .legal p, .legal li { margin:0 0 8px; }
+  .legal ul { padding-left:20px; margin:0 0 8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Care Bot</h1>
+  <p class="brand">by Mazi Saint Concepts™</p>
+
+  <div id="gate" class="card">
+    <h2>Admin login</h2>
+    <input id="token" type="password" placeholder="Admin token">
+    <p><button id="login">Continue</button></p>
+    <p class="muted">By continuing you agree to the <a href="#" data-dlg="terms">Terms of Use</a> and the <a href="#" data-dlg="privacy">Privacy Policy</a>.</p>
+    <p id="gateErr" class="muted"></p>
+  </div>
+
+  <div id="app" class="hidden">
+    <div class="card">
+      <h2>Business</h2>
+      <select id="bizSelect"></select>
+      <details style="margin-top:10px"><summary>Add a business</summary>
+        <label>Business name</label><input id="newName">
+        <label>Website URL</label><input id="newUrl" placeholder="https://example.com">
+        <p><button id="addBiz">Add and read website</button></p>
+      </details>
+    </div>
+
+    <div id="panel" class="hidden">
+      <div class="card">
+        <h2>WhatsApp</h2>
+        <p>Status: <span id="waStatus" class="pill">...</span> <span id="waNumber" class="muted"></span></p>
+        <div id="pairBox">
+          <label>Your WhatsApp number, with country code (e.g. 2347012345678)</label>
+          <div class="row"><input id="phone" inputmode="tel" placeholder="2347012345678"><button id="pair">Get pairing code</button></div>
+        </div>
+        <div id="codeBox" class="hidden">
+          <div id="code" class="code"></div>
+          <p class="muted">On that phone: WhatsApp → Settings → Linked devices → Link a device → <b>Link with phone number instead</b>, then type this code. It expires in a couple of minutes.</p>
+        </div>
+        <p id="waErr" class="muted"></p>
+        <button id="unlink" class="danger hidden">Disconnect WhatsApp</button>
+      </div>
+
+      <div class="card">
+        <h2>Knowledge</h2>
+        <p class="muted" id="crawlInfo"></p>
+        <button id="crawl" class="ghost">Re-read website</button>
+        <label>Owner notes (prices, delivery areas, opening hours, policies, anything not on the site). These override the website.</label>
+        <textarea id="notes"></textarea>
+      </div>
+
+      <div class="card">
+        <h2>Behaviour</h2>
+        <label>Tone</label><input id="tone">
+        <label>Message when the bot hands over to you</label><textarea id="handoff" style="min-height:60px"></textarea>
+        <label><input id="enabled" type="checkbox" style="width:auto"> Bot is on</label>
+        <p><button id="save">Save</button> <span id="saved" class="muted"></span></p>
+      </div>
+
+      <div class="card">
+        <h2>Test the bot</h2>
+        <div id="chat" class="chat"></div>
+        <div class="row"><input id="msg" placeholder="Type like a customer..."><button id="send">Send</button></div>
+      </div>
+
+      <div class="card">
+        <h2>Recent WhatsApp messages</h2>
+        <div id="log" class="muted">Nothing yet.</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <p>© 2026 Mazi Saint Concepts. All rights reserved.</p>
+  <p>Mazi Saint Concepts™ is a trademark of Mazi Saint Concepts. The ™ symbol shows an unregistered trademark claim.</p>
+  <p>Care Bot is an independent product. It is not affiliated with, endorsed by or sponsored by WhatsApp or Meta. WhatsApp and Meta are trademarks of their respective owners. Claude is a trademark of Anthropic, PBC. All other names and marks belong to their owners.</p>
+  <p>Replies are written by artificial intelligence and may contain mistakes. Check important details with the business.</p>
+  <p>
+    <a href="#" data-dlg="terms">Terms of Use</a> ·
+    <a href="#" data-dlg="privacy">Privacy Policy</a> ·
+    <a href="#" data-dlg="notice">Legal notice</a> ·
+    Contact: 07065599931
+  </p>
+</footer>
+
+<dialog id="dlg-terms" aria-labelledby="t-terms">
+  <div class="dlg-head"><h2 id="t-terms">Terms of Use</h2><button class="ghost" data-close>Close</button></div>
+  <div class="legal">
+    <p class="muted">Effective 1 November 2026</p>
+    <h3>1. Who we are</h3>
+    <p>Care Bot is provided by Mazi Saint Concepts ("we", "us"). By logging in or using Care Bot ("the Service") you agree to these Terms. If you do not agree, do not use the Service.</p>
+    <h3>2. What the Service does</h3>
+    <p>The Service reads the website you give us, then uses artificial intelligence to reply to your customers on a WhatsApp number you link to it. You can switch the bot off, pause it in any chat, or disconnect your number at any time.</p>
+    <h3>3. Your responsibilities</h3>
+    <ul>
+      <li>You must own, or have the right to use, the website, the business information and the WhatsApp number you connect.</li>
+      <li>You are responsible for what the bot says on your behalf, including the notes and settings you give it. Review them and test the bot before relying on it.</li>
+      <li>You must tell your customers that an automated assistant may reply to them, and you must have a lawful basis to process their messages under applicable law, including the Nigeria Data Protection Act 2023.</li>
+      <li>You must follow the WhatsApp terms and all applicable laws. Do not use the Service for spam, bulk or unsolicited messages, harassment, fraud, deception or any unlawful content.</li>
+      <li>Keep your admin token secret. You are responsible for activity done with it.</li>
+    </ul>
+    <h3>4. AI replies</h3>
+    <p>Replies are generated by artificial intelligence and may be wrong, incomplete or out of date. The bot is built to hand over to you when it is unsure, but we cannot guarantee that it will always do so. The Service does not give professional medical, legal, financial or safety advice, and you must not present its replies as such.</p>
+    <h3>5. WhatsApp</h3>
+    <p>The Service connects through WhatsApp's "Linked devices" feature using an unofficial method. We are not affiliated with, endorsed by or sponsored by WhatsApp or Meta. WhatsApp may limit, restrict or ban numbers at its discretion, and we cannot prevent or guarantee against this. You use the Service at your own risk.</p>
+    <h3>6. Intellectual property</h3>
+    <p>The Service, its software, design, text and the name and mark Mazi Saint Concepts™ belong to Mazi Saint Concepts. All rights are reserved. You may use the Service only as these Terms allow. You may not copy, resell, sublicense, or reverse engineer the Service, except where the law does not allow us to forbid it.</p>
+    <p>You keep ownership of your business content. You give us permission to process it, including your website content, notes and customer messages, only as needed to run the Service for you.</p>
+    <h3>7. Availability and changes</h3>
+    <p>The Service is provided "as is" and "as available". We do not promise it will be uninterrupted or error free. We may change, suspend or stop any part of the Service, and we may update these Terms. Continued use after an update means you accept it.</p>
+    <h3>8. Limits on our liability</h3>
+    <p>To the fullest extent the law allows, we are not liable for indirect or consequential loss, loss of profit, loss of customers or goodwill, loss of data, or any restriction of your WhatsApp number. Our total liability for any claim is limited to the fees you paid us for the Service in the three months before the claim arose. Nothing in these Terms limits liability that cannot be limited by law.</p>
+    <h3>9. Ending the Service</h3>
+    <p>You may stop using the Service at any time. We may suspend or end your access if you break these Terms or use the Service in a way that could harm others or us.</p>
+    <h3>10. Governing law</h3>
+    <p>These Terms are governed by the laws of the Federal Republic of Nigeria, and the courts of Nigeria have jurisdiction over any dispute.</p>
+    <h3>11. Contact</h3>
+    <p>Mazi Saint Concepts: 07065599931.</p>
+  </div>
+</dialog>
+
+<dialog id="dlg-privacy" aria-labelledby="t-privacy">
+  <div class="dlg-head"><h2 id="t-privacy">Privacy Policy</h2><button class="ghost" data-close>Close</button></div>
+  <div class="legal">
+    <p class="muted">Effective 1 November 2026</p>
+    <h3>1. Who is responsible</h3>
+    <p>Mazi Saint Concepts runs Care Bot. For the account and business details you give us, we are the data controller. For your customers' WhatsApp messages, you (the business) decide why and how they are used, and we process them for you.</p>
+    <h3>2. What we collect</h3>
+    <ul>
+      <li><b>Business details:</b> business name, website address, tone, owner notes and bot settings.</li>
+      <li><b>Website content:</b> text and public contact details we read from the website address you give us.</li>
+      <li><b>WhatsApp data:</b> the linked number, your customers' WhatsApp numbers or IDs, display names, message text and times, and the replies sent. For photos, voice notes, videos, documents and locations we only record that one was sent. We do not download or store the file.</li>
+      <li><b>Connection data:</b> the login session that keeps your WhatsApp linked, stored on our server.</li>
+    </ul>
+    <h3>3. How we use it</h3>
+    <p>To read your website, answer your customers, tell you when a customer needs you, show your chat history in the dashboard, keep the Service secure and working, and prevent abuse. We do not sell personal data, and we do not use it to train AI models.</p>
+    <h3>4. AI processing</h3>
+    <p>To write a reply, the customer's recent messages, your website content and your notes are sent to an AI provider (Anthropic's Claude) for processing. Do not put sensitive information in your notes unless it is needed.</p>
+    <h3>5. Sharing</h3>
+    <p>We share data only with the service providers needed to run the Service (hosting, database and AI processing) and where the law requires it. These providers may process data outside Nigeria. Where that happens, we take reasonable steps to protect it as the Nigeria Data Protection Act 2023 requires.</p>
+    <h3>6. How long we keep it</h3>
+    <p>Chat history and business details are kept until you ask us to delete them or your business is removed. If you disconnect WhatsApp, the stored login session is deleted from our server immediately.</p>
+    <h3>7. Security</h3>
+    <p>We use reasonable technical and organisational measures, including a private admin token. No system is completely secure, so we cannot guarantee absolute security.</p>
+    <h3>8. Your rights</h3>
+    <p>You and your customers may ask to access, correct or delete personal data, object to its use, or withdraw consent, as the Nigeria Data Protection Act 2023 allows. You may also complain to the Nigeria Data Protection Commission. Customers of a business should contact that business first.</p>
+    <h3>9. Children</h3>
+    <p>The Service is not directed at children under 18.</p>
+    <h3>10. Changes and contact</h3>
+    <p>We may update this policy and will change the date above when we do. Questions or requests: Mazi Saint Concepts, 07065599931.</p>
+  </div>
+</dialog>
+
+<dialog id="dlg-notice" aria-labelledby="t-notice">
+  <div class="dlg-head"><h2 id="t-notice">Legal notice</h2><button class="ghost" data-close>Close</button></div>
+  <div class="legal">
+    <h3>Copyright</h3>
+    <p>© 2026 Mazi Saint Concepts. All rights reserved. No part of this software or dashboard may be copied, distributed, sold or reused without written permission from Mazi Saint Concepts.</p>
+    <h3>Trademark</h3>
+    <p>Mazi Saint Concepts™ is a trademark of Mazi Saint Concepts. The ™ symbol shows an unregistered trademark claim. Using the name or mark without permission is not allowed.</p>
+    <h3>Third-party marks</h3>
+    <p>WhatsApp and Meta are trademarks of their respective owners. Claude is a trademark of Anthropic, PBC. Care Bot is not affiliated with, endorsed by or sponsored by any of them. They are named only to describe how the Service works.</p>
+    <h3>No professional advice</h3>
+    <p>Replies written by the bot are generated by artificial intelligence. They are for general customer care only and are not medical, legal, financial or other professional advice.</p>
+  </div>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let token = localStorage.getItem('carebot_token') || '';
+let biz = null, poll = null, testHistory = [];
+
+async function api(path, opts = {}) {
+  const res = await fetch('/api' + path, {
+    ...opts,
+    headers: { 'content-type': 'application/json', 'x-admin-token': token },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+async function boot() {
+  try {
+    const list = await api('/businesses');
+    $('gate').classList.add('hidden'); $('app').classList.remove('hidden');
+    const sel = $('bizSelect'); sel.innerHTML = '';
+    list.forEach((b) => { const o = document.createElement('option'); o.value = b.id; o.textContent = b.name; sel.appendChild(o); });
+    if (list.length) pick(list.find((b) => b.id === biz?.id) || list[0]);
+  } catch (e) {
+    $('gateErr').textContent = token ? e.message : '';
+    $('gate').classList.remove('hidden'); $('app').classList.add('hidden');
+  }
+}
+
+function pick(b) {
+  biz = b; $('bizSelect').value = b.id; $('panel').classList.remove('hidden');
+  $('notes').value = b.notes; $('tone').value = b.tone; $('handoff').value = b.handoff_message; $('enabled').checked = b.bot_enabled;
+  $('crawlInfo').textContent = b.crawl_status === 'ready'
+    ? `Read ${b.pages_count} pages from ${b.website_url}${b.crawled_at ? ' on ' + new Date(b.crawled_at).toLocaleString() : ''}.`
+    : `Website: ${b.crawl_status}`;
+  testHistory = []; $('chat').innerHTML = '';
+  refreshWa(); refreshLog();
+  clearInterval(poll); poll = setInterval(() => { refreshWa(); refreshCrawl(); }, 3000);
+}
+
+async function refreshCrawl() {
+  const list = await api('/businesses').catch(() => null); if (!list) return;
+  const b = list.find((x) => x.id === biz.id); if (!b) return;
+  biz = { ...biz, crawl_status: b.crawl_status, pages_count: b.pages_count, crawled_at: b.crawled_at };
+  $('crawlInfo').textContent = b.crawl_status === 'ready'
+    ? `Read ${b.pages_count} pages from ${b.website_url}${b.crawled_at ? ' on ' + new Date(b.crawled_at).toLocaleString() : ''}.`
+    : `Website: ${b.crawl_status}`;
+}
+
+async function refreshWa() {
+  if (!biz) return;
+  const s = await api(`/businesses/${biz.id}/whatsapp/status`).catch(() => null); if (!s) return;
+  $('waStatus').textContent = s.status.replace('_', ' ');
+  $('waNumber').textContent = s.number && s.status === 'connected' ? '+' + s.number : '';
+  const connected = s.status === 'connected';
+  $('pairBox').classList.toggle('hidden', connected);
+  $('unlink').classList.toggle('hidden', !connected && s.status === 'disconnected');
+  $('codeBox').classList.toggle('hidden', !s.pairingCode);
+  $('code').textContent = s.pairingCode || '';
+  $('waErr').textContent = s.error || '';
+}
+
+async function refreshLog() {
+  const rows = await api(`/businesses/${biz.id}/messages`).catch(() => []);
+  const box = $('log'); box.textContent = rows.length ? '' : 'Nothing yet.';
+  rows.slice(0, 30).forEach((r) => {
+    const d = document.createElement('div'); d.style.margin = '4px 0';
+    d.textContent = `${r.role === 'customer' ? '👤' : r.role === 'bot' ? '🤖' : '🧑‍💼'} ${r.chat_jid.split('@')[0]}: ${r.text}`;
+    box.appendChild(d);
+  });
+}
+
+function addBubble(role, text, flag) {
+  const d = document.createElement('div'); d.className = 'bubble ' + role; d.textContent = text; $('chat').appendChild(d);
+  if (flag) { const f = document.createElement('div'); f.className = 'flag'; f.textContent = flag; $('chat').appendChild(f); }
+  $('chat').scrollTop = 1e6;
+}
+
+$('login').onclick = () => { token = $('token').value.trim(); localStorage.setItem('carebot_token', token); boot(); };
+$('bizSelect').onchange = async (e) => { const list = await api('/businesses'); pick(list.find((b) => b.id == e.target.value)); };
+$('addBiz').onclick = async () => {
+  try { const b = await api('/businesses', { method: 'POST', body: { name: $('newName').value, website_url: $('newUrl').value } }); biz = b; $('newName').value = $('newUrl').value = ''; boot(); }
+  catch (e) { alert(e.message); }
+};
+$('pair').onclick = async () => {
+  $('waErr').textContent = '';
+  try { await api(`/businesses/${biz.id}/whatsapp/pair`, { method: 'POST', body: { phone: $('phone').value } }); $('waStatus').textContent = 'requesting code...'; }
+  catch (e) { $('waErr').textContent = e.message; }
+};
+$('unlink').onclick = async () => { if (confirm('Disconnect this WhatsApp number?')) { await api(`/businesses/${biz.id}/whatsapp/disconnect`, { method: 'POST' }); refreshWa(); } };
+$('crawl').onclick = async () => { await api(`/businesses/${biz.id}/crawl`, { method: 'POST' }); $('crawlInfo').textContent = 'Website: crawling...'; };
+$('save').onclick = async () => {
+  try {
+    biz = await api(`/businesses/${biz.id}`, { method: 'PATCH', body: { notes: $('notes').value, tone: $('tone').value, handoff_message: $('handoff').value, bot_enabled: $('enabled').checked } });
+    $('saved').textContent = 'Saved'; setTimeout(() => ($('saved').textContent = ''), 2000);
+  } catch (e) { alert(e.message); }
+};
+async function sendTest() {
+  const text = $('msg').value.trim(); if (!text) return;
+  $('msg').value = ''; addBubble('customer', text); testHistory.push({ role: 'customer', text });
+  try {
+    const r = await api(`/businesses/${biz.id}/test`, { method: 'POST', body: { history: testHistory } });
+    testHistory.push({ role: 'bot', text: r.reply });
+    addBubble('bot', r.reply, r.needs_human ? `⚠ would hand over: ${r.reason || 'needs a human'}` : `confidence: ${r.confidence}`);
+  } catch (e) { addBubble('bot', 'Error: ' + e.message); }
+}
+$('send').onclick = sendTest;
+$('msg').onkeydown = (e) => { if (e.key === 'Enter') sendTest(); };
+
+document.querySelectorAll('[data-dlg]').forEach((a) => {
+  a.addEventListener('click', (e) => { e.preventDefault(); $('dlg-' + a.dataset.dlg).showModal(); });
+});
+document.querySelectorAll('dialog [data-close]').forEach((b) => {
+  b.addEventListener('click', () => b.closest('dialog').close());
+});
+document.querySelectorAll('dialog').forEach((d) => {
+  d.addEventListener('click', (e) => { if (e.target === d) d.close(); });
+});
+
+if (token) boot();
+</script>
+</body>
+</html>

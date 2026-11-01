@@ -1,0 +1,43 @@
+# Care Bot
+
+by Mazi Saint Concepts™
+
+WhatsApp customer care bot for businesses with websites. It reads the site, links to the owner's own WhatsApp with a pairing code (no second phone, no QR), and answers customers using Claude.
+
+## Run locally
+
+```bash
+cp .env.example .env     # fill in DATABASE_URL, ANTHROPIC_API_KEY, ADMIN_TOKEN
+npm install
+node --env-file=.env src/index.js
+```
+
+Open http://localhost:3000, enter your admin token, add a business, wait for the crawl, test in the playground, then link WhatsApp.
+
+## Deploy on Railway
+
+1. Add a Postgres service and a Node service from this repo.
+2. Add a **volume** mounted at `/data` and set `SESSIONS_DIR=/data/sessions` (WhatsApp logins live here; without it every redeploy logs the owner out).
+3. Set `ANTHROPIC_API_KEY`, `ADMIN_TOKEN`, `DEFAULT_COUNTRY_CODE`. `DATABASE_URL` is provided by Railway.
+4. Run a single instance (one process per WhatsApp session).
+
+## How the bot stays smart
+
+- Answers only from the crawled website plus the owner's notes. Small sites go into the prompt whole; large ones use keyword retrieval.
+- Remembers the last 14 messages of each chat, and merges rapid-fire messages into one answer.
+- Matches the customer's language (English, Pidgin, Yoruba, Igbo, Hausa, French...).
+- Collects order/booking details, then pings the owner on their own WhatsApp.
+- Low confidence or unknown answers are handed to the owner, never guessed.
+- If the owner replies from their phone, the bot goes quiet in that chat for 12h. Send `!bot on` or `!bot off` in a chat to control it.
+
+## Limits to know
+
+- Uses the unofficial WhatsApp Web protocol (Baileys), so ban risk exists. The bot only replies, never sends bulk messages, and limits itself to 25 replies per chat per hour.
+- Sites that render only with client-side JavaScript can't be crawled. Paste the details into Owner notes.
+- It cannot read images or voice notes; it asks the customer to type.
+
+## Legal
+
+© 2026 Mazi Saint Concepts. All rights reserved. See [LICENSE](LICENSE). Mazi Saint Concepts™ is a trademark of Mazi Saint Concepts (unregistered). The dashboard includes Terms of Use, a Privacy Policy and a legal notice (footer of `public/index.html`). Care Bot is not affiliated with, endorsed by or sponsored by WhatsApp or Meta. WhatsApp and Meta are trademarks of their respective owners. Claude is a trademark of Anthropic, PBC.
+
+Contact: 07065599931
