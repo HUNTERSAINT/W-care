@@ -7,6 +7,14 @@ import { crawlAndStore, assertPublicUrl } from './crawler.js';
 import { answer } from './brain.js';
 import { connect, disconnect, getSessionInfo, normalizePhone, restoreSessions } from './whatsapp.js';
 
+// WhatsApp's encryption library prints a multi-line stack for every undecryptable message
+// (old sessions, status updates, groups). That drowns the real logs, so drop only those lines.
+const NOISE = /^(Session error|Failed to decrypt message|Closing open session|Closing session|Removing old closed session|Opening session)|libsignal|Bad MAC/;
+const origError = console.error.bind(console);
+console.error = (...args) => { if (!NOISE.test(String(args[0]))) origError(...args); };
+const origInfo = console.info.bind(console);
+console.info = (...args) => { if (!NOISE.test(String(args[0]))) origInfo(...args); };
+
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
 if (!ADMIN_TOKEN || ADMIN_TOKEN.length < 12) { console.error('Set ADMIN_TOKEN (12+ characters) in the environment.'); process.exit(1); }
 

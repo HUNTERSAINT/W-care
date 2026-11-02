@@ -222,7 +222,9 @@ async function onMessage(businessId, s, m) {
   const { rows: [b] } = await pool.query('select * from businesses where id=$1', [businessId]);
   if (!b) return;
   await log(businessId, jid, 'customer', text);
-  if (!b.bot_enabled || (await isPaused(businessId, jid))) return;
+  const paused = await isPaused(businessId, jid);
+  console.log(`incoming chat=${jid.split('@')[1]} len=${text.length} bot_enabled=${b.bot_enabled} paused=${paused}`);
+  if (!b.bot_enabled || paused) return;
 
   // Customers often send several short messages in a row: wait a moment and answer them together.
   const key = `${businessId}:${jid}`;
@@ -247,11 +249,15 @@ async function respond(businessId, s, jid, customerName) {
   const history = rows.reverse();
 
   const result = await answer(b, history);
+  console.log(`answer confidence=${result.confidence} needs_human=${result.needs_human} reason=${result.reason || '-'}`);
   await sendText(s.sock, jid, result.reply);
+  console.log('reply sent');
   await log(businessId, jid, 'bot', result.reply);
 
   if (result.needs_human) {
-    await pauseChat(businessId, jid, HANDOFF_PAUSE_HOURS);
+    // A technical AI failure should not silence the bot in this chat; a real handover should.
+    const aiFault = /^AI error/.test(result.reason || '');
+    if (!aiFault) await pauseChat(businessId, jid, HANDOFF_PAUSE_HOURS);
     const lastCustomer = [...history].reverse().find((h) => h.role === 'customer')?.text || '';
     const number = jid.endsWith('@s.whatsapp.net') ? jid.split('@')[0] : null;
     const ownerJid = `${s.sock.user.id.split(':')[0].split('@')[0]}@s.whatsapp.net`;

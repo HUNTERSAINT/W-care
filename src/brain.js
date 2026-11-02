@@ -18,11 +18,12 @@ const replySchema = {
   required: ['reply', 'confidence', 'needs_human'],
 };
 
-let modelCache = null; // { models, at }
+// Known-good models tried first, so a normal reply needs ONE network call (no model listing step).
+const DEFAULT_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];
+let modelCache = null; // { models, at } - only filled when the defaults stop working (HTTP 404)
 
-// Picks working flash models automatically so a retired model name never breaks the bot.
-async function geminiModels(apiKey) {
-  if (process.env.GEMINI_MODEL) return [process.env.GEMINI_MODEL];
+// Only used when a default model has been retired: asks Google which flash models exist now.
+async function discoverModels(apiKey) {
   if (modelCache && Date.now() - modelCache.at < 3600_000) return modelCache.models;
   const res = await fetch(`${GEMINI_BASE}/models?pageSize=200`, { headers: { 'x-goog-api-key': apiKey }, signal: AbortSignal.timeout(15000) });
   if (!res.ok) throw new Error(`Could not list Gemini models (HTTP ${res.status})`);
@@ -44,28 +45,61 @@ async function geminiModels(apiKey) {
 async function callGemini(system, messages) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY is not set');
-  const body = {
+  const bodyFor = (model) => ({
     systemInstruction: { parts: [{ text: system }] },
     contents: messages.map((m) => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] })),
-    generationConfig: { temperature: 0.4, maxOutputTokens: 2048, responseMimeType: 'application/json', responseSchema: replySchema },
-  };
-  let lastError = 'unknown error';
-  for (const model of await geminiModels(apiKey)) {
-    const res = await fetch(`${GEMINI_BASE}/models/${encodeURIComponent(model)}:generateContent`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(30000),
-    });
-    if (res.ok) return res.json();
-    lastError = `HTTP ${res.status} from ${model}`;
-    // Busy, rate limited or model gone: try the next model. Anything else is a real error.
-    if (![404, 429, 500, 503].includes(res.status)) {
-      throw new Error(`${lastError}: ${(await res.text()).slice(0, 200)}`);
+    generationConfig: {
+      temperature: 0.4, maxOutputTokens: 1024, responseMimeType: 'application/json', responseSchema: replySchema,
+      // Customer care replies don't need long "thinking": switching it off makes replies several times faster.
+      ...(/^gemini-2\.5-flash/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+    },
+  });
+
+  const tryModels = async (models) => {
+    let lastError = 'unknown error';
+    let sawMissing = false;
+    for (const model of models) {
+      const started = Date.now();
+      try {
+        const res = await fetch(`${GEMINI_BASE}/models/${encodeURIComponent(model)}:generateContent`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+          body: JSON.stringify(bodyFor(model)),
+          signal: AbortSignal.timeout(20000),
+        });
+        if (res.ok) { console.log(`gemini ok model=${model} ${Date.now() - started}ms`); return { data: await res.json() }; }
+        const detail = (await res.text()).slice(0, 300);
+        lastError = `HTTP ${res.status} from ${model}: ${detail}`;
+        console.error(`gemini failed ${lastError}`);
+        if (res.status === 404) sawMissing = true;
+        // Bad key or bad request will not get better with another model.
+        if ([400, 401, 403].includes(res.status)) throw new Error(lastError);
+      } catch (e) {
+        if (/^HTTP (400|401|403)/.test(e.message)) throw e;
+        lastError = `${model}: ${e.name === 'TimeoutError' ? 'timed out after 20s' : e.message}`;
+        console.error(`gemini error ${lastError} (${Date.now() - started}ms)`);
+      }
     }
-    modelCache = null;
+    return { error: lastError, sawMissing };
+  };
+
+  if (process.env.GEMINI_MODEL) {
+    const r = await tryModels([process.env.GEMINI_MODEL, ...DEFAULT_MODELS.filter((m) => m !== process.env.GEMINI_MODEL)]);
+    if (r.data) return r.data;
+    throw new Error(r.error);
   }
-  throw new Error(lastError);
+  const first = await tryModels(DEFAULT_MODELS);
+  if (first.data) return first.data;
+  // A default model may have been retired: look up what exists now and try those.
+  if (first.sawMissing) {
+    modelCache = null;
+    const fresh = (await discoverModels(apiKey)).filter((m) => !DEFAULT_MODELS.includes(m));
+    if (fresh.length) {
+      const second = await tryModels(fresh);
+      if (second.data) return second.data;
+    }
+  }
+  throw new Error(first.error);
 }
 
 async function loadKnowledge(businessId, history) {
@@ -136,6 +170,9 @@ export async function answer(business, history) {
   if (!messages.length) return { reply: business.handoff_message, confidence: 'low', needs_human: true, reason: 'no customer message' };
   try {
     const knowledge = await loadKnowledge(business.id, history);
+    if (!knowledge && !business.notes?.trim()) {
+      return { reply: business.handoff_message, confidence: 'low', needs_human: true, reason: 'the bot has no business knowledge yet (website not read, no owner notes)' };
+    }
     const res = await callGemini(buildSystem(business, knowledge), messages);
     const cand = res.candidates?.[0];
     if (!cand || res.promptFeedback?.blockReason) throw new Error(`Blocked by the AI provider (${res.promptFeedback?.blockReason || 'no candidate'})`);
