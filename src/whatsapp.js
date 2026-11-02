@@ -111,8 +111,14 @@ export async function connect(businessId, { phone, restored } = {}) {
   });
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return;
+    // 'notify' = live message. 'append' = delivered while the server was restarting or reconnecting
+    // (every redeploy!). Accept those too, but only if they are recent, so old history is never answered.
+    if (type !== 'notify' && type !== 'append') return;
     for (const m of messages) {
+      if (type === 'append') {
+        const ageSec = Date.now() / 1000 - Number(m.messageTimestamp || 0);
+        if (!(ageSec >= 0 && ageSec < 600)) continue;
+      }
       try { await onMessage(businessId, s, m); } catch (e) { console.error('message error:', e.message); }
     }
   });
