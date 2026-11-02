@@ -266,7 +266,10 @@ async function onMessage(businessId, s, m) {
   let text = extractText(m.message);
   if (!text) {
     const kind = mediaKind(m.message);
-    if (!kind) return; // stickers, reactions, protocol messages
+    if (!kind) { // stickers, reactions, protocol messages
+      console.log(`ignored message with no text: chat=${jid.split('@')[1]} types=${Object.keys(m.message).join(',')}`);
+      return;
+    }
     text = `[The customer sent ${kind}]`;
   }
 
