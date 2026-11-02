@@ -2,12 +2,12 @@
 
 by Mazi Saint Concepts™
 
-WhatsApp customer care bot for businesses with websites. It reads the site, links to the owner's own WhatsApp with a pairing code (no second phone, no QR), and answers customers using Claude.
+WhatsApp customer care bot for businesses with websites. It reads the site, links to the owner's own WhatsApp with a pairing code (no second phone, no QR), and answers customers using Google Gemini (free tier available).
 
 ## Run locally
 
 ```bash
-cp .env.example .env     # fill in DATABASE_URL, ANTHROPIC_API_KEY, ADMIN_TOKEN
+cp .env.example .env     # fill in DATABASE_URL, GEMINI_API_KEY, ADMIN_TOKEN
 npm install
 node --env-file=.env src/index.js
 ```
@@ -18,7 +18,7 @@ Open http://localhost:3000, enter your admin token, add a business, wait for the
 
 1. Add a Postgres service and a Node service from this repo.
 2. Add a **volume** mounted at `/data` and set `SESSIONS_DIR=/data/sessions` (WhatsApp logins live here; without it every redeploy logs the owner out).
-3. Set `ANTHROPIC_API_KEY`, `ADMIN_TOKEN`, `DEFAULT_COUNTRY_CODE`. `DATABASE_URL` is provided by Railway.
+3. Set `GEMINI_API_KEY` (copy the same value you use in Postwave), `ADMIN_TOKEN`, `DEFAULT_COUNTRY_CODE`. `GEMINI_MODEL` is optional. `DATABASE_URL` is provided by Railway.
 4. Run a single instance (one process per WhatsApp session).
 
 ## How the bot stays smart
@@ -35,9 +35,10 @@ Open http://localhost:3000, enter your admin token, add a business, wait for the
 - Uses the unofficial WhatsApp Web protocol (Baileys), so ban risk exists. The bot only replies, never sends bulk messages, and limits itself to 25 replies per chat per hour.
 - Sites that render only with client-side JavaScript can't be crawled. Paste the details into Owner notes.
 - It cannot read images or voice notes; it asks the customer to type.
+- Gemini's free tier has request limits and Google may use free-tier prompts to improve its products. Customers' messages are sent to Gemini, so use a paid key once real customer data is involved.
 
 ## Legal
 
-© 2026 Mazi Saint Concepts. All rights reserved. See [LICENSE](LICENSE). Mazi Saint Concepts™ is a trademark of Mazi Saint Concepts (unregistered). The dashboard includes Terms of Use, a Privacy Policy and a legal notice (footer of `public/index.html`). Care Bot is not affiliated with, endorsed by or sponsored by WhatsApp or Meta. WhatsApp and Meta are trademarks of their respective owners. Claude is a trademark of Anthropic, PBC.
+© 2026 Mazi Saint Concepts. All rights reserved. See [LICENSE](LICENSE). Mazi Saint Concepts™ is a trademark of Mazi Saint Concepts (unregistered). The dashboard includes Terms of Use, a Privacy Policy and a legal notice (footer of `public/index.html`). Care Bot is not affiliated with, endorsed by or sponsored by WhatsApp or Meta. WhatsApp and Meta are trademarks of their respective owners. Gemini is a trademark of Google LLC.
 
 Contact: 07065599931

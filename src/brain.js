@@ -1,25 +1,72 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { pool } from './db.js';
 
-const client = new Anthropic();
-const MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-5-5';
+// Google Gemini (free tier available: https://aistudio.google.com/apikey).
+// Same env names as Postwave: GEMINI_API_KEY, and optional GEMINI_MODEL.
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 // Small sites fit entirely in the prompt (best accuracy). Bigger ones use keyword retrieval.
 const FULL_KB_LIMIT = 40000;
 
-const replyTool = {
-  name: 'send_reply',
-  description: 'Send the reply to the customer and report how sure you are.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      reply: { type: 'string', description: 'The WhatsApp message to send. Plain text, no markdown headings.' },
-      confidence: { type: 'string', enum: ['high', 'medium', 'low'], description: 'How well the knowledge covers this question.' },
-      needs_human: { type: 'boolean', description: 'True if the business owner/team must step in.' },
-      reason: { type: 'string', description: 'Short note for the owner when needs_human is true (e.g. "ready to order: 2 bags, Lekki").' },
-    },
-    required: ['reply', 'confidence', 'needs_human'],
+// Gemini structured-output schema: the model must return exactly these fields.
+const replySchema = {
+  type: 'OBJECT',
+  properties: {
+    reply: { type: 'STRING', description: 'The WhatsApp message to send. Plain text, no markdown headings.' },
+    confidence: { type: 'STRING', enum: ['high', 'medium', 'low'], description: 'How well the knowledge covers this question.' },
+    needs_human: { type: 'BOOLEAN', description: 'True if the business owner/team must step in.' },
+    reason: { type: 'STRING', description: 'Short note for the owner when needs_human is true (e.g. "ready to order: 2 bags, Lekki").' },
   },
+  required: ['reply', 'confidence', 'needs_human'],
 };
+
+let modelCache = null; // { models, at }
+
+// Picks working flash models automatically so a retired model name never breaks the bot.
+async function geminiModels(apiKey) {
+  if (process.env.GEMINI_MODEL) return [process.env.GEMINI_MODEL];
+  if (modelCache && Date.now() - modelCache.at < 3600_000) return modelCache.models;
+  const res = await fetch(`${GEMINI_BASE}/models?pageSize=200`, { headers: { 'x-goog-api-key': apiKey }, signal: AbortSignal.timeout(15000) });
+  if (!res.ok) throw new Error(`Could not list Gemini models (HTTP ${res.status})`);
+  const data = await res.json();
+  const names = (data.models || [])
+    .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+    .map((m) => (m.name || '').replace(/^models\//, ''))
+    .filter((n) => /^gemini-[\d.]+-flash(-lite)?$/.test(n));
+  // Smartest first: regular flash before lite, newest version first.
+  names.sort((a, b) => {
+    const rank = (n) => (n.includes('lite') ? 1 : 0);
+    return rank(a) - rank(b) || b.localeCompare(a, undefined, { numeric: true });
+  });
+  if (!names.length) throw new Error('No Gemini flash model is available for this API key');
+  modelCache = { models: names.slice(0, 3), at: Date.now() };
+  return modelCache.models;
+}
+
+async function callGemini(system, messages) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error('GEMINI_API_KEY is not set');
+  const body = {
+    systemInstruction: { parts: [{ text: system }] },
+    contents: messages.map((m) => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] })),
+    generationConfig: { temperature: 0.4, maxOutputTokens: 2048, responseMimeType: 'application/json', responseSchema: replySchema },
+  };
+  let lastError = 'unknown error';
+  for (const model of await geminiModels(apiKey)) {
+    const res = await fetch(`${GEMINI_BASE}/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (res.ok) return res.json();
+    lastError = `HTTP ${res.status} from ${model}`;
+    // Busy, rate limited or model gone: try the next model. Anything else is a real error.
+    if (![404, 429, 500, 503].includes(res.status)) {
+      throw new Error(`${lastError}: ${(await res.text()).slice(0, 200)}`);
+    }
+    modelCache = null;
+  }
+  throw new Error(lastError);
+}
 
 async function loadKnowledge(businessId, history) {
   const { rows: [{ total }] } = await pool.query(
@@ -89,20 +136,17 @@ export async function answer(business, history) {
   if (!messages.length) return { reply: business.handoff_message, confidence: 'low', needs_human: true, reason: 'no customer message' };
   try {
     const knowledge = await loadKnowledge(business.id, history);
-    const res = await client.messages.create({
-      model: MODEL,
-      max_tokens: 700,
-      system: [{ type: 'text', text: buildSystem(business, knowledge), cache_control: { type: 'ephemeral' } }],
-      tools: [replyTool],
-      tool_choice: { type: 'tool', name: 'send_reply' },
-      messages,
-    });
-    const block = res.content.find((b) => b.type === 'tool_use');
-    if (!block?.input?.reply) throw new Error('No reply produced');
-    const { reply, confidence = 'medium', needs_human = false, reason = '' } = block.input;
+    const res = await callGemini(buildSystem(business, knowledge), messages);
+    const cand = res.candidates?.[0];
+    if (!cand || res.promptFeedback?.blockReason) throw new Error(`Blocked by the AI provider (${res.promptFeedback?.blockReason || 'no candidate'})`);
+    const raw = (cand.content?.parts || []).map((p) => p.text || '').join('').trim();
+    let out;
+    try { out = JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch { throw new Error('The AI returned an unreadable answer'); }
+    if (typeof out?.reply !== 'string' || !out.reply.trim()) throw new Error('No reply produced');
+    const confidence = ['high', 'medium', 'low'].includes(out.confidence) ? out.confidence : 'low';
     // Low confidence is never answered with a guess: hand over instead.
-    const escalate = needs_human || confidence === 'low';
-    return { reply: reply.trim(), confidence, needs_human: escalate, reason };
+    const escalate = out.needs_human === true || confidence === 'low';
+    return { reply: out.reply.trim(), confidence, needs_human: escalate, reason: typeof out.reason === 'string' ? out.reason : '' };
   } catch (e) {
     console.error('brain error:', e.message);
     return { reply: business.handoff_message, confidence: 'low', needs_human: true, reason: `AI error: ${e.message}` };
