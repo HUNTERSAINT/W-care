@@ -11,7 +11,9 @@ const OWNER_PAUSE_HOURS = Number(process.env.OWNER_PAUSE_HOURS || 12);
 const HANDOFF_PAUSE_HOURS = 6;
 const MAX_REPLIES_PER_HOUR = 25;
 const BATCH_WAIT_MS = 3500;
-const logger = pino({ level: 'warn' });
+// Baileys logs every undecryptable status update / group message at error level. Those are harmless
+// and would bury the useful lines, so only fatal problems are shown. Our own console.log lines cover the rest.
+const logger = pino({ level: 'fatal' });
 
 const sessions = new Map(); // businessId -> session state
 const botSent = new Set(); // message ids sent by the bot, so they are not mistaken for the owner typing
