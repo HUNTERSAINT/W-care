@@ -1,4 +1,4 @@
-import makeWASocket, { useMultiFileAuthState, DisconnectReason, Browsers, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
+import makeWASocket, { useMultiFileAuthState, DisconnectReason, Browsers, fetchLatestBaileysVersion } from 'baileys';
 import pino from 'pino';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -65,22 +65,30 @@ export async function connect(businessId, { phone, restored } = {}) {
 
   sock.ev.on('creds.update', saveCreds);
 
+  // Ask WhatsApp for the 8-character pairing code (once). Triggered by the first QR event, or after
+  // 4 seconds if this version of the library does not emit one.
+  const requestCode = async () => {
+    if (!s.phone || s.requested || s.everOpened || state.creds.registered) return;
+    s.requested = true;
+    try {
+      const code = await sock.requestPairingCode(s.phone);
+      s.pairingCode = code.match(/.{1,4}/g).join('-');
+      s.status = 'awaiting_code';
+      await setStatus(businessId, 'awaiting_code');
+      console.log('pairing code issued');
+    } catch (e) {
+      s.status = 'error'; s.error = e.message;
+      console.error('pairing code failed:', e.message);
+    }
+  };
+  if (s.phone) setTimeout(() => { if (sessions.get(businessId) === s) requestCode(); }, 4000);
+
   sock.ev.on('connection.update', async (u) => {
     if (sessions.get(businessId) !== s) return;
     const { connection, lastDisconnect, qr } = u;
 
     // The socket is ready for a pairing request once WhatsApp offers a QR.
-    if (qr && s.phone && !s.requested && !s.everOpened) {
-      s.requested = true;
-      try {
-        const code = await sock.requestPairingCode(s.phone);
-        s.pairingCode = code.match(/.{1,4}/g).join('-');
-        s.status = 'awaiting_code';
-        await setStatus(businessId, 'awaiting_code');
-      } catch (e) {
-        s.status = 'error'; s.error = e.message;
-      }
-    }
+    if (qr) requestCode();
 
     if (connection === 'open') {
       s.status = 'connected'; s.pairingCode = null; s.everOpened = true; s.retries = 0; s.error = null;

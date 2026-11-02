@@ -96,7 +96,7 @@ export async function answer(business, history) {
       schema: replySchema,
       maxTokens: 1024,
       temperature: 0.4,
-      timeoutMs: 15000,
+      timeoutMs: 10000,
     });
     if (typeof out?.reply !== 'string' || !out.reply.trim()) throw new Error('No reply produced');
     const confidence = ['high', 'medium', 'low'].includes(out.confidence) ? out.confidence : 'low';

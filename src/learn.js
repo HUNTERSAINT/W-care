@@ -94,7 +94,7 @@ export async function learnFromChats(businessId) {
       schema: learnSchema,
       maxTokens: 6000,
       temperature: 0.2,
-      timeoutMs: 90000,
+      timeoutMs: 45000,
     });
     const playbook = formatPlaybook(out);
     if (!playbook) throw new Error('The AI produced an empty playbook');

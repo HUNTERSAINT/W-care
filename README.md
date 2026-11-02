@@ -38,7 +38,7 @@ Open http://localhost:3000, enter your admin token, add a business, wait for the
 
 ## Limits to know
 
-- Uses the unofficial WhatsApp Web protocol (Baileys), so ban risk exists. The bot only replies, never sends bulk messages, and limits itself to 25 replies per chat per hour.
+- Uses the unofficial WhatsApp Web protocol (Baileys v7), so ban risk exists. The bot only replies, never sends bulk messages, and limits itself to 25 replies per chat per hour.
 - Websites are read directly first. If a site blocks robots or only shows content through JavaScript, the page is opened through the Jina Reader service instead (free, about 20 pages a minute; set `JINA_API_KEY` for more). Anything still unreadable can be pasted into Owner notes.
 - It cannot read images or voice notes; it asks the customer to type.
 - Gemini's free tier has request limits and Google may use free-tier prompts to improve its products. Customers' messages are sent to Gemini, so use a paid key once real customer data is involved.

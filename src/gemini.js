@@ -35,7 +35,10 @@ async function candidates(apiKey) {
   const alive = list.filter((m) => !(benched.get(m) > Date.now()));
   const pool = alive.length ? alive : list; // everything benched: try them all anyway
   const ordered = good && pool.includes(good) ? [good, ...pool.filter((m) => m !== good)] : pool;
-  return ordered.slice(0, 4);
+  // At most 3 regular models plus 1 lite model as the fast last resort.
+  const regular = ordered.filter((m) => !m.includes('lite')).slice(0, 3);
+  const lite = ordered.filter((m) => m.includes('lite')).slice(0, 1);
+  return [...regular, ...lite];
 }
 
 // Sends one request and returns the parsed JSON object the model produced.
