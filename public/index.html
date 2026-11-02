@@ -113,6 +113,13 @@
 
       <div class="card">
         <h2>Behaviour</h2>
+        <label>Who should the bot reply as?</label>
+        <select id="mode">
+          <option value="business">Business assistant (answers customers from your website and notes)</option>
+          <option value="personal">Reply as me (answers anyone in my own voice, based on how I reply)</option>
+        </select>
+        <p class="muted">"Reply as me" copies your real way of replying. It never invents facts about your life and hands over to you on money, commitments, serious or emotional topics. If someone sincerely asks, it says it is your automated assistant. Press "Learn from my chats now" after switching.</p>
+        <label>Never reply to these numbers (one per line, with country code)</label><textarea id="ignore" style="min-height:60px" placeholder="2348012345678"></textarea>
         <label>Tone</label><input id="tone">
         <label>Message when the bot hands over to you</label><textarea id="handoff" style="min-height:60px"></textarea>
         <label><input id="enabled" type="checkbox" style="width:auto"> Bot is on</label>
@@ -157,6 +164,7 @@
     <h3>3. Your responsibilities</h3>
     <ul>
       <li>You must own, or have the right to use, the website, the business information and the WhatsApp number you connect.</li>
+      <li>If you switch on "Reply as me", the bot writes to anyone who messages you, in your style. You are responsible for telling your contacts where the law or fairness requires it. The bot identifies itself as your automated assistant when sincerely asked. Use the never-reply list for people it must not answer.</li>
       <li>You are responsible for what the bot says on your behalf, including the notes and settings you give it. Review them and test the bot before relying on it.</li>
       <li>You must tell your customers that an automated assistant may reply to them, and you must have a lawful basis to process their messages under applicable law, including the Nigeria Data Protection Act 2023.</li>
       <li>You must follow the WhatsApp terms and all applicable laws. Do not use the Service for spam, bulk or unsolicited messages, harassment, fraud, deception or any unlawful content.</li>
@@ -194,7 +202,7 @@
       <li><b>Business details:</b> business name, website address, tone, owner notes and bot settings.</li>
       <li><b>Website content:</b> text and public contact details we read from the website address you give us.</li>
       <li><b>WhatsApp data:</b> the linked number, your customers' WhatsApp numbers or IDs, display names, message text and times, and the replies sent. For photos, voice notes, videos, documents and locations we only record that one was sent. We do not download or store the file.</li>
-      <li><b>Chat history for learning:</b> when you link WhatsApp, the text of your recent one-to-one chats is imported and kept so the assistant can learn how you answer customers. Group chats, status updates, photos, voice notes and other files are not stored. A short summary of how you write and the answers you give is kept with your business settings. You can edit or delete this summary in the dashboard, or ask us to delete your imported chats.</li>
+      <li><b>Chat history for learning:</b> when you link WhatsApp, the text of your recent one-to-one chats is imported and kept so the assistant can learn how you answer customers and write to people. Examples from other chats are used only to copy your writing style and are never shown to anyone. Group chats, status updates, photos, voice notes and other files are not stored. A short summary of how you write and the answers you give is kept with your business settings. You can edit or delete this summary in the dashboard, or ask us to delete your imported chats.</li>
       <li><b>Connection data:</b> the login session that keeps your WhatsApp linked, stored on our server.</li>
     </ul>
     <h3>3. How we use it</h3>
@@ -261,7 +269,7 @@ async function boot() {
 
 function pick(b) {
   biz = b; $('bizSelect').value = b.id; $('panel').classList.remove('hidden');
-  $('notes').value = b.notes; $('learned').value = b.learned || ''; $('tone').value = b.tone; $('handoff').value = b.handoff_message; $('enabled').checked = b.bot_enabled;
+  $('notes').value = b.notes; $('learned').value = b.learned || ''; $('tone').value = b.tone; $('mode').value = b.mode || 'business'; $('ignore').value = b.ignore_numbers || ''; $('handoff').value = b.handoff_message; $('enabled').checked = b.bot_enabled;
   $('crawlInfo').textContent = b.crawl_status === 'ready'
     ? `Read ${b.pages_count} pages from ${b.website_url}${b.crawled_at ? ' on ' + new Date(b.crawled_at).toLocaleString() : ''}.`
     : `Website: ${b.crawl_status}`;
@@ -341,7 +349,7 @@ $('learn').onclick = async () => {
 $('crawl').onclick = async () => { await api(`/businesses/${biz.id}/crawl`, { method: 'POST' }); $('crawlInfo').textContent = 'Website: crawling...'; };
 $('save').onclick = async () => {
   try {
-    biz = await api(`/businesses/${biz.id}`, { method: 'PATCH', body: { notes: $('notes').value, learned: $('learned').value, tone: $('tone').value, handoff_message: $('handoff').value, bot_enabled: $('enabled').checked } });
+    biz = await api(`/businesses/${biz.id}`, { method: 'PATCH', body: { notes: $('notes').value, learned: $('learned').value, tone: $('tone').value, mode: $('mode').value, ignore_numbers: $('ignore').value, handoff_message: $('handoff').value, bot_enabled: $('enabled').checked } });
     $('saved').textContent = 'Saved'; setTimeout(() => ($('saved').textContent = ''), 2000);
   } catch (e) { alert(e.message); }
 };

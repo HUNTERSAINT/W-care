@@ -249,6 +249,16 @@ async function sendText(sock, jid, text) {
   await sock.sendMessage(jid, { text }, { messageId: id });
 }
 
+// Numbers the owner never wants the bot to answer. Matches on the last 9 digits so +234 / 0 prefixes both work.
+function isIgnored(list, ...jids) {
+  const wanted = String(list || '').split(/[\s,;]+/).map((x) => x.replace(/\D/g, '').slice(-9)).filter((x) => x.length >= 7);
+  if (!wanted.length) return false;
+  return jids.filter(Boolean).some((j) => {
+    const d = String(j).split('@')[0].split(':')[0].replace(/\D/g, '');
+    return wanted.some((w) => d.endsWith(w));
+  });
+}
+
 async function onMessage(businessId, s, m) {
   const jid = m.key.remoteJid;
   if (!jid || jid === 'status@broadcast' || jid.endsWith('@g.us') || jid.endsWith('@broadcast') || jid.endsWith('@newsletter')) return;
@@ -287,6 +297,7 @@ async function onMessage(businessId, s, m) {
   const paused = await isPaused(businessId, jid);
   console.log(`incoming chat=${jid.split('@')[1]} len=${text.length} bot_enabled=${b.bot_enabled} paused=${paused}`);
   if (!b.bot_enabled || paused) return;
+  if (isIgnored(b.ignore_numbers, jid, m.key.remoteJidAlt)) { console.log('chat is on the never-reply list'); return; }
 
   // Customers often send several short messages in a row: wait a moment and answer them together.
   const key = `${businessId}:${jid}`;
@@ -310,7 +321,7 @@ async function respond(businessId, s, jid, customerName) {
     'select role, text from messages where business_id=$1 and chat_jid=$2 order by id desc limit 14', [businessId, jid]);
   const history = rows.reverse();
 
-  const result = await answer(b, history);
+  const result = await answer(b, history, { jid });
   console.log(`answer confidence=${result.confidence} needs_human=${result.needs_human} reason=${result.reason || '-'}`);
   await sendText(s.sock, jid, result.reply);
   console.log('reply sent');

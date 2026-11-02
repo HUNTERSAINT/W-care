@@ -56,6 +56,8 @@ export async function migrate() {
     alter table businesses add column if not exists learned text not null default '';
     alter table businesses add column if not exists learned_at timestamptz;
     alter table businesses add column if not exists learn_status text not null default 'never';
+    alter table businesses add column if not exists mode text not null default 'business';
+    alter table businesses add column if not exists ignore_numbers text not null default '';
     alter table messages add column if not exists source text not null default 'live';
     alter table messages add column if not exists wa_id text;
     create unique index if not exists messages_wa_id_idx on messages(business_id, wa_id) where wa_id is not null;

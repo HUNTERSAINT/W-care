@@ -47,10 +47,12 @@ app.post('/api/businesses', wrap(async (req, res) => {
 }));
 
 app.patch('/api/businesses/:id', wrap(async (req, res) => {
-  const allowed = ['name', 'website_url', 'tone', 'notes', 'handoff_message', 'bot_enabled', 'learned'];
+  const allowed = ['name', 'website_url', 'tone', 'notes', 'handoff_message', 'bot_enabled', 'learned', 'mode', 'ignore_numbers'];
   const keys = Object.keys(req.body).filter((k) => allowed.includes(k));
   if (!keys.length) throw new Error('Nothing to update');
   if (keys.includes('website_url')) await assertPublicUrl(req.body.website_url);
+  if (keys.includes('mode') && !['business', 'personal'].includes(req.body.mode)) throw new Error('mode must be business or personal');
+  if (keys.includes('ignore_numbers')) req.body.ignore_numbers = String(req.body.ignore_numbers || '').slice(0, 4000);
   const sets = keys.map((k, i) => `${k}=$${i + 2}`).join(', ');
   const { rows: [b] } = await pool.query(`update businesses set ${sets} where id=$1 returning *`, [req.params.id, ...keys.map((k) => req.body[k])]);
   if (!b) throw new Error('Business not found');

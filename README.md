@@ -36,6 +36,10 @@ Open http://localhost:3000, enter your admin token, add a business, wait for the
 - Already linked before this feature existed? Press **Disconnect WhatsApp**, then link again, to receive the history. New chats and the owner's new replies are learned automatically every few hours, or press **Learn from my chats now**.
 - Groups, status updates and media are not stored.
 
+## Reply as me (personal mode)
+
+In **Behaviour**, choose "Reply as me" so the bot answers anyone (friends, family, customers) the way you would. It uses your style, your real replies as examples (picked from similar messages in your other chats, voice only), and your notes. It never invents facts about your life, hands over to you on money, commitments, serious/emotional topics and possible scams, and says it is your automated assistant if sincerely asked. Add numbers under "Never reply to these numbers" for people it must skip. Press **Learn from my chats now** after switching.
+
 ## Limits to know
 
 - Uses the unofficial WhatsApp Web protocol (Baileys v7), so ban risk exists. The bot only replies, never sends bulk messages, and limits itself to 25 replies per chat per hour.

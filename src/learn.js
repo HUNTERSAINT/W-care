@@ -18,6 +18,15 @@ const learnSchema = {
         required: ['question', 'answer'],
       },
     },
+    voice_examples: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: { situation: { type: 'STRING' }, owner_reply: { type: 'STRING' } },
+        required: ['situation', 'owner_reply'],
+      },
+      description: 'Real replies the owner sent, copied word for word, with a short anonymous description of what they replied to.',
+    },
     owner_handles_personally: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Kinds of requests the owner deals with personally.' },
   },
   required: ['style', 'facts', 'faq'],
@@ -27,8 +36,9 @@ const SYSTEM = `You study a small business owner's real WhatsApp conversations w
 
 Rules:
 - Use ONLY what the owner actually said. Never invent prices, hours, policies, bank details or promises.
-- "style": describe tone, language mix (English, Pidgin, Yoruba, Igbo, Hausa...), greetings and sign-offs, emoji use, usual message length, formality, and 3 to 6 typical phrases the owner uses.
+- "style": describe in detail how the owner writes to everyone (customers, friends, family): tone, language mix (English, Pidgin, Yoruba, Igbo, Hausa...), greetings and sign-offs, emoji use, usual message length, formality, and 3 to 6 typical phrases the owner uses.
 - "facts": up to 30 short statements of business facts the owner gave (services, products, prices, locations, delivery, payment methods, opening hours, policies). If a price or fact changed over time, keep the most recent.
+- "voice_examples": up to 25 of the owner's real replies copied EXACTLY (same spelling, slang, emoji), covering different situations: greetings, thanks, declining, delays, casual chat, questions, agreeing, disagreeing, with a short anonymous "situation". Include non-business chats too. Skip anything revealing private details about other people.
 - "faq": up to 30 questions customers ask repeatedly, written in general form, each with the owner's real answer in the owner's voice. Skip anything that only concerned one person.
 - "owner_handles_personally": types of requests the owner handled by hand (negotiation, complaints, custom orders, refunds...).
 - PRIVACY: never include a customer's name, phone number, address or personal details. Business phone numbers and payment details the owner gives to everyone may be kept.
@@ -39,8 +49,9 @@ function formatPlaybook(out) {
   if (out.style?.trim()) lines.push(`OWNER'S STYLE: ${out.style.trim()}`);
   if (out.facts?.length) lines.push('FACTS THE OWNER HAS STATED:\n' + out.facts.map((f) => `- ${String(f).trim()}`).join('\n'));
   if (out.faq?.length) lines.push('COMMON QUESTIONS AND THE OWNER\'S REAL ANSWERS:\n' + out.faq.map((q) => `Q: ${String(q.question).trim()}\nA: ${String(q.answer).trim()}`).join('\n\n'));
+  if (out.voice_examples?.length) lines.push('REAL REPLIES THE OWNER HAS SENT (copy this voice):\n' + out.voice_examples.map((v) => `Situation: ${String(v.situation).trim()}\nOwner: ${String(v.owner_reply).trim()}`).join('\n\n'));
   if (out.owner_handles_personally?.length) lines.push('THE OWNER HANDLES PERSONALLY (hand these over): ' + out.owner_handles_personally.join('; '));
-  return lines.join('\n\n').slice(0, 24000);
+  return lines.join('\n\n').slice(0, 30000);
 }
 
 // Builds a compact transcript: recent one-to-one chats where the owner replied to a customer.
