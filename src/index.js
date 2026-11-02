@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { pool, migrate } from './db.js';
 import { crawlAndStore, assertPublicUrl } from './crawler.js';
 import { answer } from './brain.js';
+import { learnFromChats, autoLearnAll } from './learn.js';
 import { connect, disconnect, getSessionInfo, normalizePhone, restoreSessions } from './whatsapp.js';
 
 // WhatsApp's encryption library prints a multi-line stack for every undecryptable message
@@ -46,7 +47,7 @@ app.post('/api/businesses', wrap(async (req, res) => {
 }));
 
 app.patch('/api/businesses/:id', wrap(async (req, res) => {
-  const allowed = ['name', 'website_url', 'tone', 'notes', 'handoff_message', 'bot_enabled'];
+  const allowed = ['name', 'website_url', 'tone', 'notes', 'handoff_message', 'bot_enabled', 'learned'];
   const keys = Object.keys(req.body).filter((k) => allowed.includes(k));
   if (!keys.length) throw new Error('Nothing to update');
   if (keys.includes('website_url')) await assertPublicUrl(req.body.website_url);
@@ -81,6 +82,25 @@ app.post('/api/businesses/:id/whatsapp/disconnect', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+app.post('/api/businesses/:id/learn', wrap(async (req, res) => {
+  const b = await getBiz(req.params.id);
+  if (!b) throw new Error('Business not found');
+  if (b.learn_status === 'learning') throw new Error('Already learning, please wait a minute');
+  learnFromChats(Number(req.params.id)).catch((e) => console.error('learn failed:', e.message));
+  res.json({ started: true });
+}));
+
+app.get('/api/businesses/:id/stats', wrap(async (req, res) => {
+  const { rows: [r] } = await pool.query(
+    `select count(*)::int as total,
+            count(*) filter (where role='owner')::int as owner,
+            count(*) filter (where role='customer')::int as customer,
+            count(*) filter (where source='history')::int as history,
+            count(distinct chat_jid)::int as chats
+     from messages where business_id=$1`, [req.params.id]);
+  res.json(r);
+}));
+
 app.get('/api/businesses/:id/messages', wrap(async (req, res) => {
   const { rows } = await pool.query(
     'select chat_jid, role, text, created_at from messages where business_id=$1 order by id desc limit 100', [req.params.id]);
@@ -97,5 +117,10 @@ app.post('/api/businesses/:id/test', wrap(async (req, res) => {
 
 const port = Number(process.env.PORT || 3000);
 await migrate();
+// A restart in the middle of a job would leave it stuck on "working" forever.
+await pool.query("update businesses set learn_status='never' where learn_status='learning'");
+await pool.query("update businesses set crawl_status='failed: interrupted by a restart, press Re-read website' where crawl_status='crawling'");
 app.listen(port, () => console.log(`Care bot dashboard on :${port}`));
 restoreSessions().catch((e) => console.error('restore failed:', e.message));
+// Refresh what the bot has learned from the owner's chats every few hours when there are new replies.
+setInterval(() => autoLearnAll().catch((e) => console.error('auto-learn failed:', e.message)), 6 * 3600_000);

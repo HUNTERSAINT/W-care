@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pool } from './db.js';
 import { answer } from './brain.js';
+import { learnFromChats } from './learn.js';
 
 const SESSIONS_DIR = process.env.SESSIONS_DIR || './sessions';
 const OWNER_PAUSE_HOURS = Number(process.env.OWNER_PAUSE_HOURS || 12);
@@ -110,6 +111,40 @@ export async function connect(businessId, { phone, restored } = {}) {
     }
   });
 
+  // When WhatsApp is linked, it sends recent chat history once. Keep the text of one-to-one chats so the bot
+  // can learn how the owner talks to customers and remember earlier conversations with each customer.
+  sock.ev.on('messaging-history.set', async ({ messages = [] }) => {
+    try {
+      const cutoff = Date.now() / 1000 - 180 * 86400;
+      const rows = [];
+      for (const m of messages) {
+        const jid = m.key?.remoteJid;
+        if (!jid || !(jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid')) || !m.key.id) continue;
+        const text = extractText(m.message);
+        const ts = Number(m.messageTimestamp || 0);
+        if (!text || !(ts > cutoff)) continue;
+        rows.push({ jid, role: m.key.fromMe ? 'owner' : 'customer', text: text.slice(0, 2000), at: new Date(ts * 1000).toISOString(), id: m.key.id });
+      }
+      let stored = 0;
+      for (let i = 0; i < rows.length; i += 1000) {
+        const part = rows.slice(i, i + 1000);
+        const r = await pool.query(
+          `insert into messages(business_id, chat_jid, role, text, created_at, source, wa_id)
+           select $1, t.jid, t.role, t.text, t.at::timestamptz, 'history', t.id
+           from unnest($2::text[], $3::text[], $4::text[], $5::text[], $6::text[]) as t(jid, role, text, at, id)
+           on conflict do nothing`,
+          [businessId, part.map((x) => x.jid), part.map((x) => x.role), part.map((x) => x.text), part.map((x) => x.at), part.map((x) => x.id)]);
+        stored += r.rowCount;
+      }
+      console.log(`history sync: received ${messages.length}, stored ${stored} text messages from 1:1 chats`);
+      if (stored > 0) {
+        // History arrives in several parts: learn once, shortly after the last one.
+        clearTimeout(s.learnTimer);
+        s.learnTimer = setTimeout(() => learnFromChats(businessId).catch((e) => console.error('learn failed:', e.message)), 45_000);
+      }
+    } catch (e) { console.error('history sync error:', e.message); }
+  });
+
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     // 'notify' = live message. 'append' = delivered while the server was restarting or reconnecting
     // (every redeploy!). Accept those too, but only if they are recent, so old history is never answered.
@@ -163,8 +198,10 @@ function mediaKind(msg) {
   return null;
 }
 
-async function log(businessId, jid, role, text) {
-  await pool.query('insert into messages(business_id,chat_jid,role,text) values($1,$2,$3,$4)', [businessId, jid, role, text]);
+async function log(businessId, jid, role, text, waId = null) {
+  await pool.query(
+    'insert into messages(business_id,chat_jid,role,text,wa_id) values($1,$2,$3,$4,$5) on conflict do nothing',
+    [businessId, jid, role, text, waId]);
 }
 
 async function pauseChat(businessId, jid, hours) {
@@ -208,6 +245,12 @@ async function onMessage(businessId, s, m) {
   const jid = m.key.remoteJid;
   if (!jid || jid === 'status@broadcast' || jid.endsWith('@g.us') || jid.endsWith('@broadcast') || jid.endsWith('@newsletter')) return;
 
+  if (!m.message) {
+    // WhatsApp delivered an envelope we could not decrypt (it asks the sender's phone to resend).
+    console.log(`empty message, probably undecryptable: chat=${jid.split('@')[1]} fromMe=${!!m.key.fromMe} stub=${m.messageStubType ?? '-'}`);
+    return;
+  }
+
   // The owner typing from their own phone.
   if (m.key.fromMe) {
     if (botSent.delete(m.key.id)) return;
@@ -215,7 +258,7 @@ async function onMessage(businessId, s, m) {
     if (!text) return;
     if (/^!bot\s+on$/i.test(text)) { await resumeChat(businessId, jid); return; }
     if (/^!bot\s+off$/i.test(text)) { await pauseChat(businessId, jid, 24 * 365); return; }
-    await log(businessId, jid, 'owner', text);
+    await log(businessId, jid, 'owner', text, m.key.id);
     await pauseChat(businessId, jid, OWNER_PAUSE_HOURS);
     return;
   }
@@ -229,7 +272,7 @@ async function onMessage(businessId, s, m) {
 
   const { rows: [b] } = await pool.query('select * from businesses where id=$1', [businessId]);
   if (!b) return;
-  await log(businessId, jid, 'customer', text);
+  await log(businessId, jid, 'customer', text, m.key.id);
   const paused = await isPaused(businessId, jid);
   console.log(`incoming chat=${jid.split('@')[1]} len=${text.length} bot_enabled=${b.bot_enabled} paused=${paused}`);
   if (!b.bot_enabled || paused) return;

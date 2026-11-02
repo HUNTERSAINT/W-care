@@ -30,6 +30,12 @@ Open http://localhost:3000, enter your admin token, add a business, wait for the
 - Low confidence or unknown answers are handed to the owner, never guessed.
 - If the owner replies from their phone, the bot goes quiet in that chat for 12h. Send `!bot on` or `!bot off` in a chat to control it.
 
+## Learning from the owner's chats
+
+- When WhatsApp is linked, WhatsApp sends recent chat history once. The text of one-to-one chats (last 180 days) is stored, and Gemini writes a playbook: the owner's style, facts they stated, and their real answers to common questions. The playbook is shown (and editable) in the dashboard and is used by the bot ahead of the website.
+- Already linked before this feature existed? Press **Disconnect WhatsApp**, then link again, to receive the history. New chats and the owner's new replies are learned automatically every few hours, or press **Learn from my chats now**.
+- Groups, status updates and media are not stored.
+
 ## Limits to know
 
 - Uses the unofficial WhatsApp Web protocol (Baileys), so ban risk exists. The bot only replies, never sends bulk messages, and limits itself to 25 replies per chat per hour.

@@ -102,6 +102,16 @@
       </div>
 
       <div class="card">
+        <h2>Learn from my WhatsApp chats</h2>
+        <p class="muted">The bot studies your past conversations with customers, copies how you talk and reuses your real answers. Chat text from one-to-one chats is imported when you link WhatsApp, and new chats are added as they happen.</p>
+        <p class="muted" id="learnStats"></p>
+        <p class="muted" id="learnStatus"></p>
+        <button id="learn" class="ghost">Learn from my chats now</button>
+        <label>What the bot learned (you can edit it, then press Save below)</label>
+        <textarea id="learned" style="min-height:160px"></textarea>
+      </div>
+
+      <div class="card">
         <h2>Behaviour</h2>
         <label>Tone</label><input id="tone">
         <label>Message when the bot hands over to you</label><textarea id="handoff" style="min-height:60px"></textarea>
@@ -150,6 +160,7 @@
       <li>You are responsible for what the bot says on your behalf, including the notes and settings you give it. Review them and test the bot before relying on it.</li>
       <li>You must tell your customers that an automated assistant may reply to them, and you must have a lawful basis to process their messages under applicable law, including the Nigeria Data Protection Act 2023.</li>
       <li>You must follow the WhatsApp terms and all applicable laws. Do not use the Service for spam, bulk or unsolicited messages, harassment, fraud, deception or any unlawful content.</li>
+      <li>You must have the right to let the Service read your chats with your customers, and you must tell customers, where the law requires it, that conversations are processed by an automated assistant.</li>
       <li>Keep your admin token secret. You are responsible for activity done with it.</li>
     </ul>
     <h3>4. AI replies</h3>
@@ -183,6 +194,7 @@
       <li><b>Business details:</b> business name, website address, tone, owner notes and bot settings.</li>
       <li><b>Website content:</b> text and public contact details we read from the website address you give us.</li>
       <li><b>WhatsApp data:</b> the linked number, your customers' WhatsApp numbers or IDs, display names, message text and times, and the replies sent. For photos, voice notes, videos, documents and locations we only record that one was sent. We do not download or store the file.</li>
+      <li><b>Chat history for learning:</b> when you link WhatsApp, the text of your recent one-to-one chats is imported and kept so the assistant can learn how you answer customers. Group chats, status updates, photos, voice notes and other files are not stored. A short summary of how you write and the answers you give is kept with your business settings. You can edit or delete this summary in the dashboard, or ask us to delete your imported chats.</li>
       <li><b>Connection data:</b> the login session that keeps your WhatsApp linked, stored on our server.</li>
     </ul>
     <h3>3. How we use it</h3>
@@ -249,13 +261,14 @@ async function boot() {
 
 function pick(b) {
   biz = b; $('bizSelect').value = b.id; $('panel').classList.remove('hidden');
-  $('notes').value = b.notes; $('tone').value = b.tone; $('handoff').value = b.handoff_message; $('enabled').checked = b.bot_enabled;
+  $('notes').value = b.notes; $('learned').value = b.learned || ''; $('tone').value = b.tone; $('handoff').value = b.handoff_message; $('enabled').checked = b.bot_enabled;
   $('crawlInfo').textContent = b.crawl_status === 'ready'
     ? `Read ${b.pages_count} pages from ${b.website_url}${b.crawled_at ? ' on ' + new Date(b.crawled_at).toLocaleString() : ''}.`
     : `Website: ${b.crawl_status}`;
   testHistory = []; $('chat').innerHTML = '';
   refreshWa(); refreshLog();
-  clearInterval(poll); poll = setInterval(() => { refreshWa(); refreshCrawl(); }, 3000);
+  refreshLearn(true);
+  clearInterval(poll); poll = setInterval(() => { refreshWa(); refreshCrawl(); refreshLearn(false); }, 3000);
 }
 
 async function refreshCrawl() {
@@ -265,6 +278,19 @@ async function refreshCrawl() {
   $('crawlInfo').textContent = b.crawl_status === 'ready'
     ? `Read ${b.pages_count} pages from ${b.website_url}${b.crawled_at ? ' on ' + new Date(b.crawled_at).toLocaleString() : ''}.`
     : `Website: ${b.crawl_status}`;
+}
+
+async function refreshLearn(fillText) {
+  if (!biz) return;
+  const [list, st] = await Promise.all([api('/businesses').catch(() => null), api(`/businesses/${biz.id}/stats`).catch(() => null)]);
+  const b = list?.find((x) => x.id === biz.id);
+  if (b) {
+    $('learnStatus').textContent = 'Status: ' + b.learn_status;
+    if (fillText && document.activeElement !== $('learned')) $('learned').value = b.learned || '';
+    if (!fillText && b.learned_at && b.learned_at !== biz.learned_at && document.activeElement !== $('learned')) $('learned').value = b.learned || '';
+    biz = { ...biz, learned_at: b.learned_at };
+  }
+  if (st) $('learnStats').textContent = `${st.total} messages stored from ${st.chats} chats (${st.owner} from you, ${st.customer} from customers, ${st.history} imported from WhatsApp history).`;
 }
 
 async function refreshWa() {
@@ -308,10 +334,14 @@ $('pair').onclick = async () => {
   catch (e) { $('waErr').textContent = e.message; }
 };
 $('unlink').onclick = async () => { if (confirm('Disconnect this WhatsApp number?')) { await api(`/businesses/${biz.id}/whatsapp/disconnect`, { method: 'POST' }); refreshWa(); } };
+$('learn').onclick = async () => {
+  try { await api(`/businesses/${biz.id}/learn`, { method: 'POST' }); $('learnStatus').textContent = 'Status: learning...'; }
+  catch (e) { alert(e.message); }
+};
 $('crawl').onclick = async () => { await api(`/businesses/${biz.id}/crawl`, { method: 'POST' }); $('crawlInfo').textContent = 'Website: crawling...'; };
 $('save').onclick = async () => {
   try {
-    biz = await api(`/businesses/${biz.id}`, { method: 'PATCH', body: { notes: $('notes').value, tone: $('tone').value, handoff_message: $('handoff').value, bot_enabled: $('enabled').checked } });
+    biz = await api(`/businesses/${biz.id}`, { method: 'PATCH', body: { notes: $('notes').value, learned: $('learned').value, tone: $('tone').value, handoff_message: $('handoff').value, bot_enabled: $('enabled').checked } });
     $('saved').textContent = 'Saved'; setTimeout(() => ($('saved').textContent = ''), 2000);
   } catch (e) { alert(e.message); }
 };
